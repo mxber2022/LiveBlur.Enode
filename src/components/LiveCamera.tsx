@@ -35,6 +35,10 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
     facesDetected: 0,
     facesMatched: 0
   });
+  const [showUnblurModal, setShowUnblurModal] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+  const [pendingFacesMatched, setPendingFacesMatched] = useState<number>(0);
+  const [pendingDetections, setPendingDetections] = useState<any[]>([]);
 
   // Load face-api models
   useEffect(() => {
@@ -252,8 +256,10 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
     // Convert to base64
     const photoData = canvas.toDataURL('image/jpeg', 0.9);
     
-    // Process faces in the captured photo to count them
+    // Process faces in the captured photo to count them and check for matches
     let facesDetected = 0;
+    let facesMatched = 0;
+    let matchedDetections: any[] = [];
     try {
       const detections = await faceapi
         .detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions())
@@ -261,11 +267,32 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
         .withFaceDescriptors();
 
       facesDetected = detections.length;
+      if (detections.length > 0 && faceDatabase.length > 0) {
+        for (const detection of detections) {
+          for (const knownFace of faceDatabase) {
+            const distance = faceapi.euclideanDistance(detection.descriptor, knownFace.descriptor);
+            if (distance < 0.6) {
+              facesMatched++;
+              matchedDetections.push(detection);
+              break;
+            }
+          }
+        }
+      }
+      setPendingDetections(matchedDetections);
     } catch (err) {
       console.error('Face detection error:', err);
     }
-    
-    // Add to gallery instead of face database
+
+    if (facesMatched > 0) {
+      setPendingPhoto(photoData);
+      setPendingFacesMatched(facesMatched);
+      setShowUnblurModal(true);
+      setCapturing(false);
+      return; // Don't save yet
+    }
+
+    // Add to gallery if no match
     const newGalleryItem = {
       id: Date.now().toString(),
       image: photoData,
@@ -339,6 +366,35 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
       canvasRef.current.width = video.videoWidth;
       canvasRef.current.height = video.videoHeight;
     }
+  };
+
+  // Helper to blur matched faces in a photo
+  const blurMatchedFaces = async (photoData: string, detections: any[]) => {
+    return new Promise<string>((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(photoData);
+        ctx.drawImage(img, 0, 0);
+        for (const detection of detections) {
+          const { box } = detection.detection;
+          ctx.save();
+          ctx.filter = 'blur(12px)';
+          ctx.drawImage(
+            img,
+            box.x, box.y, box.width, box.height,
+            box.x, box.y, box.width, box.height
+          );
+          ctx.restore();
+        }
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      img.onerror = () => resolve(photoData);
+      img.src = photoData;
+    });
   };
 
   return (
@@ -563,6 +619,63 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
                   <span>Add Faces</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unblur Modal */}
+      {showUnblurModal && (
+        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-xl p-8 max-w-sm w-full shadow-2xl text-center">
+            <h2 className="text-xl font-bold mb-4 text-gray-900">Matched Face Detected</h2>
+            <p className="mb-6 text-gray-700">
+              {pendingFacesMatched} matched face{pendingFacesMatched > 1 ? 's' : ''} found.<br />
+              To save the unblurred photo, please pay. Or save with blur for free.
+            </p>
+            <div className="flex flex-col space-y-3">
+              <button
+                className="btn-primary w-full py-3 rounded-lg font-medium"
+                onClick={async () => {
+                  // TODO: Integrate payment logic here
+                  // After payment, save unblurred photo:
+                  onGalleryChange([...gallery, {
+                    id: Date.now().toString(),
+                    image: pendingPhoto!,
+                    timestamp: new Date(),
+                    facesDetected: pendingFacesMatched
+                  }]);
+                  setShowUnblurModal(false);
+                  setShowCaptureSuccess(true);
+                  setTimeout(() => setShowCaptureSuccess(false), 3000);
+                }}
+              >
+                Pay to Unblur & Save
+              </button>
+              <button
+                className="btn-secondary w-full py-3 rounded-lg font-medium"
+                onClick={async () => {
+                  // Save blurred photo
+                  const blurred = await blurMatchedFaces(pendingPhoto!, pendingDetections);
+                  onGalleryChange([...gallery, {
+                    id: Date.now().toString(),
+                    image: blurred,
+                    timestamp: new Date(),
+                    facesDetected: pendingFacesMatched
+                  }]);
+                  setShowUnblurModal(false);
+                  setShowCaptureSuccess(true);
+                  setTimeout(() => setShowCaptureSuccess(false), 3000);
+                }}
+              >
+                Save with Blur
+              </button>
+              <button
+                className="text-gray-500 mt-2"
+                onClick={() => setShowUnblurModal(false)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
