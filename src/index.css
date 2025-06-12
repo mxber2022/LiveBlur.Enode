@@ -666,3 +666,8 @@ input:focus-visible {
 .wallet-modal {
   z-index: 2147483648 !important;
 }
+
+.wallet-dropdown {
+  z-index: 2147483647 !important;
+  position: fixed !important;
+}

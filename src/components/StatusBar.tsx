@@ -91,7 +91,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
               </button>
               {showWalletDropdown && (
                 <div
-                  className="absolute right-0 top-8 wallet-dropdown min-w-[160px] bg-gray-900 border border-gray-700 rounded-lg shadow-lg py-2 animate-fade-in z-[100000]"
+                  className="absolute right-0 top-8 wallet-dropdown min-w-[160px] bg-gray-900 border border-gray-700 rounded-lg shadow-lg py-2 animate-fade-in z-[2147483647]"
                   tabIndex={-1}
                   onBlur={() => setShowWalletDropdown(false)}
                 >
