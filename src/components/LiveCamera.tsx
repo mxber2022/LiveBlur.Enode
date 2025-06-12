@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as faceapi from 'face-api.js';
 import { Camera, Download, Zap, Activity, AlertCircle, Check, X, Save, Image as ImageIcon } from 'lucide-react';
+import { useAccount } from 'wagmi';
 
 interface LiveCameraProps {
   faceDatabase: Array<{id: string, name: string, descriptor: Float32Array, image: string}>;
@@ -39,6 +40,9 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [pendingFacesMatched, setPendingFacesMatched] = useState<number>(0);
   const [pendingDetections, setPendingDetections] = useState<any[]>([]);
+  const { address } = useAccount();
+  const [paying, setPaying] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
 
   // Load face-api models
   useEffect(() => {
@@ -635,23 +639,47 @@ export const LiveCamera: React.FC<LiveCameraProps> = ({
             </p>
             <div className="flex flex-col space-y-3">
               <button
-                className="btn-primary w-full py-3 rounded-lg font-medium"
+                className="btn-primary w-full py-3 rounded-lg font-medium disabled:opacity-60"
+                disabled={paying}
                 onClick={async () => {
-                  // TODO: Integrate payment logic here
-                  // After payment, save unblurred photo:
-                  onGalleryChange([...gallery, {
-                    id: Date.now().toString(),
-                    image: pendingPhoto!,
-                    timestamp: new Date(),
-                    facesDetected: pendingFacesMatched
-                  }]);
-                  setShowUnblurModal(false);
-                  setShowCaptureSuccess(true);
-                  setTimeout(() => setShowCaptureSuccess(false), 3000);
+                  setPaying(true);
+                  setTxError(null);
+                  try {
+                    // Use window.ethereum or ethereumProvider
+                    const ethereumProvider = (window as any).ethereum;
+                    if (!ethereumProvider || !address) {
+                      setTxError('Wallet not connected');
+                      setPaying(false);
+                      return;
+                    }
+                    const Tx = {
+                      from: "0x0cCEb44dbbAF7dE58D8D0e12c93cbE553f0d6Ebf",
+                      to: "0x0cCEb44dbbAF7dE58D8D0e12c93cbE553f0d6Ebf",
+                      value: '0x5af3107a4000', // 0.025 ETH in wei
+                    };
+                    const res = await ethereumProvider.request({
+                      method: 'eth_sendTransaction',
+                      params: [Tx],
+                    });
+                    // If transaction succeeds, save unblurred photo
+                    onGalleryChange([...gallery, {
+                      id: Date.now().toString(),
+                      image: pendingPhoto!,
+                      timestamp: new Date(),
+                      facesDetected: pendingFacesMatched
+                    }]);
+                    setShowUnblurModal(false);
+                    setShowCaptureSuccess(true);
+                    setTimeout(() => setShowCaptureSuccess(false), 3000);
+                  } catch (err: any) {
+                    setTxError(err?.message || 'Transaction failed');
+                  }
+                  setPaying(false);
                 }}
               >
-                Pay to Unblur & Save
+                {paying ? 'Processing Payment...' : 'Pay to Unblur & Save'}
               </button>
+              {txError && <div className="text-red-500 text-xs mt-2">{txError}</div>}
               <button
                 className="btn-secondary w-full py-3 rounded-lg font-medium"
                 onClick={async () => {
