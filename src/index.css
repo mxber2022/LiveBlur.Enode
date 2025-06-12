@@ -643,13 +643,26 @@ input:focus-visible {
 [role="dialog"],
 .tomo-evm-kit-modal,
 .tomo-evm-kit-portal {
-  z-index: 99999 !important;
+  z-index: 2147483647 !important;
 }
 
-* {
-  z-index: auto !important;
-}
-[role="dialog"], .rk-modal, .tomo-modal, .tomo-evm-kit-modal, .tomo-evm-kit-portal {
-  z-index: 999999 !important;
+[data-tomo-modal], 
+#tomo-modal {
+  z-index: 2147483647 !important;
   position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+/* Remove or override problematic global z-index reset */
+* {
+  /* z-index: auto !important; */
+}
+
+/* Ensure wallet modal is always on top */
+.wallet-modal-overlay {
+  z-index: 2147483647 !important;
+}
+.wallet-modal {
+  z-index: 2147483648 !important;
 }
