@@ -636,3 +636,20 @@ input:focus-visible {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* Force TomoEVMKit modal to be above all app overlays */
+.tomo-modal,
+.rk-modal,
+[role="dialog"],
+.tomo-evm-kit-modal,
+.tomo-evm-kit-portal {
+  z-index: 99999 !important;
+}
+
+* {
+  z-index: auto !important;
+}
+[role="dialog"], .rk-modal, .tomo-modal, .tomo-evm-kit-modal, .tomo-evm-kit-portal {
+  z-index: 999999 !important;
+  position: fixed !important;
+}
