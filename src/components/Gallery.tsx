@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import * as faceapi from 'face-api.js';
 import { Image as ImageIcon, Download, Trash2, UserPlus, Calendar, Eye, Grid, List, Search, Filter, Check, X } from 'lucide-react';
+import { custom, useAccount, useWalletClient } from 'wagmi';
+import { uploadJSONToIPFS } from '../utils/uploadJSONToIPFS';
+import { createHash } from 'crypto';
+import { StoryClient, StoryConfig } from '@story-protocol/core-sdk';
 
 interface GalleryItem {
   id: string;
@@ -27,6 +31,13 @@ export const Gallery: React.FC<GalleryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'faces'>('newest');
   const [processing, setProcessing] = useState<Set<string>>(new Set());
+  const [showNftModal, setShowNftModal] = useState(false);
+  const [nftMeta, setNftMeta] = useState({ name: '', description: '' });
+  const [nftImage, setNftImage] = useState<string | null>(null);
+  const [nftAttributes, setNftAttributes] = useState<Array<{trait_type: string, value: string}>>([]);
+  const { address } = useAccount();
+  const [minting, setMinting] = useState(false);
+  const [mintError, setMintError] = useState<string | null>(null);
 
   const filteredGallery = gallery
     .filter(item => {
@@ -47,6 +58,34 @@ export const Gallery: React.FC<GalleryProps> = ({
           return 0;
       }
     });
+
+  const addtoStory = (item: GalleryItem) => {
+    setNftImage(item.image);
+    setShowNftModal(true);
+    setNftAttributes([]);
+  };
+  const { data: wallet } = useWalletClient();
+
+  async function setupStoryClient(): Promise<StoryClient> {
+    const config: StoryConfig = {
+      wallet: wallet,
+      transport: custom(wallet!.transport),
+      chainId: "aeneid",
+    };
+    const client = StoryClient.newClient(config);
+    return client;
+  }
+  const handleAttributeChange = (idx: number, field: 'trait_type' | 'value', value: string) => {
+    setNftAttributes(attrs => attrs.map((attr, i) => i === idx ? { ...attr, [field]: value } : attr));
+  };
+
+  const addAttribute = () => {
+    setNftAttributes(attrs => [...attrs, { trait_type: '', value: '' }]);
+  };
+
+  const removeAttribute = (idx: number) => {
+    setNftAttributes(attrs => attrs.filter((_, i) => i !== idx));
+  };
 
   const toggleSelection = (id: string) => {
     const newSelection = new Set(selectedItems);
@@ -319,7 +358,7 @@ export const Gallery: React.FC<GalleryProps> = ({
                         {processing.has(item.id) ? (
                           <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
                         ) : (
-                          <UserPlus className="h-4 w-4" />
+                          <UserPlus className="h-4 w-4" onClick={() => addtoStory(item)} />
                         )}
                       </button>
                       
@@ -433,6 +472,206 @@ export const Gallery: React.FC<GalleryProps> = ({
             </div>
           )}
         </>
+      )}
+
+      {/* NFT Metadata Modal */}
+      {showNftModal && (
+        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="glass-premium relative w-full max-w-lg rounded-2xl border border-white/10 p-6 shadow-2xl animate-fade-in">
+            {/* Close Button */}
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => {
+                setShowNftModal(false);
+                setNftMeta({ name: '', description: '' });
+                setNftImage(null);
+                setNftAttributes([]);
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+            >
+              <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+
+            {/* Header */}
+            <h2 className="text-2xl font-bold text-center text-white mb-6">NFT Metadata</h2>
+
+            {/* NFT Image Preview */}
+            {/* {nftImage && (
+              <img
+                src={nftImage}
+                alt="NFT Preview"
+                className="mx-auto mb-6 w-32 h-32 object-cover rounded-lg border border-white/10 shadow"
+              />
+            )} */}
+
+            {/* Form */}
+            <form
+              onSubmit={async e => {
+                e.preventDefault();
+                setMinting(true);
+                setMintError(null);
+                try {
+                  // 1. Gather metadata
+                  const dataWithAttributes = {
+                    title: nftMeta.name,
+                    description: nftMeta.description,
+                    image: nftImage,
+                    attributes: nftAttributes,
+                  };
+
+                  // 2. Upload NFT metadata to IPFS
+                  const ipfsmetadata = await uploadJSONToIPFS(dataWithAttributes);
+                  const nftHash = createHash('sha256').update(JSON.stringify(dataWithAttributes)).digest('hex');
+
+                  // 3. Setup Story Protocol client
+                  const client = await setupStoryClient();
+
+                  // 4. Generate IP metadata
+                  const ipMetadata = client.ipAsset.generateIpMetadata({
+                    title: nftMeta.name,
+                    description: nftMeta.description,
+                    createdAt: new Date().getTime().toString(),
+                    creators: [
+                      {
+                        name: address as `0x${string}`,
+                        address: address as `0x${string}`,
+                        contributionPercent: 100,
+                      },
+                    ],
+                    image: nftImage as string,
+                    imageHash: `0x${nftHash}`, // Optionally hash the image
+                    mediaUrl: nftImage as string,
+                    mediaHash: `0x${nftHash}`,
+                    mediaType: 'image/jpeg',
+                  });
+
+                  // 5. Upload IP metadata to IPFS
+                  const ipIpfsHash = await uploadJSONToIPFS(ipMetadata);
+                  const ipHash = createHash('sha256').update(JSON.stringify(ipMetadata)).digest('hex');
+
+                  // 6. Mint and register IP
+                  const response = await client.ipAsset.mintAndRegisterIp({
+                    spgNftContract: '0xc32A8a0FF3beDDDa58393d022aF433e78739FAbc',
+                    ipMetadata: {
+                      ipMetadataURI: `https://ipfs.io/ipfs/${ipIpfsHash}`,
+                      ipMetadataHash: `0x${ipHash}`,
+                      nftMetadataURI: `https://ipfs.io/ipfs/${ipfsmetadata}`,
+                      nftMetadataHash: `0x${nftHash}`,
+                    }
+                  });
+
+                  console.log(
+                    `Root IPA created at tx hash ${response.txHash}, IPA ID: ${response.ipId}`
+                  );
+
+                  setShowNftModal(false);
+                  setNftMeta({ name: '', description: '' });
+                  setNftImage(null);
+                  setNftAttributes([]);
+                } catch (err: any) {
+                  setMintError(err?.message || 'Minting failed');
+                  console.error(err);
+                }
+                setMinting(false);
+              }}
+              className="space-y-5"
+            >
+              {/* Name (Horizontal) */}
+              <div className="flex items-center gap-4">
+                <label className="w-24 text-sm font-medium text-gray-200">Name</label>
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={nftMeta.name}
+                  onChange={e => setNftMeta(meta => ({ ...meta, name: e.target.value }))}
+                  className="flex-1 rounded-lg bg-black/30 text-white px-4 py-2 placeholder-gray-400 border border-white/20"
+                  required
+                />
+              </div>
+
+              {/* Description (Horizontal) */}
+              <div className="flex items-start gap-4">
+                <label className="w-24 pt-2 text-sm font-medium text-gray-200">Description</label>
+                <textarea
+                  rows={3}
+                  placeholder="Description"
+                  value={nftMeta.description}
+                  onChange={e => setNftMeta(meta => ({ ...meta, description: e.target.value }))}
+                  className="flex-1 rounded-lg bg-black/30 text-white px-4 py-2 placeholder-gray-400 border border-white/20 "
+                  required
+                />
+              </div>
+
+              {/* Attributes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-200 mb-1">Attributes</label>
+                <div className="space-y-3">
+                  {nftAttributes.map((attr, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Trait Type"
+                        value={attr.trait_type}
+                        onChange={e => handleAttributeChange(idx, 'trait_type', e.target.value)}
+                        className="flex-1 rounded-lg bg-black/30 text-white px-3 py-2 placeholder-gray-400 border border-white/20"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Value"
+                        value={attr.value}
+                        onChange={e => handleAttributeChange(idx, 'value', e.target.value)}
+                        className="flex-1 rounded-lg bg-black/30 text-white px-3 py-2 placeholder-gray-400 border border-white/20 "
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeAttribute(idx)}
+                        className="text-red-400 hover:text-red-600 text-xl font-bold px-2"
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addAttribute}
+                    className="text-sm font-medium text-blue-400 hover:text-blue-200"
+                  >
+                    + Add Attribute
+                  </button>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex justify-center gap-4 pt-4">
+                {minting && <div className="text-blue-400 text-sm text-center">Minting NFT, please wait...</div>}
+                {mintError && <div className="text-red-400 text-sm text-center">{mintError}</div>}
+                <button
+                  type="submit"
+                  className="btn-primary px-6 py-2 rounded-lg font-medium text-base"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNftModal(false);
+                    setNftMeta({ name: '', description: '' });
+                    setNftImage(null);
+                    setNftAttributes([]);
+                  }}
+                  className="btn-secondary px-6 py-2 rounded-lg font-medium text-base"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
