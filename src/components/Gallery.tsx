@@ -675,7 +675,8 @@ export const Gallery: React.FC<GalleryProps> = ({
                 )}
                 <button
                   type="submit"
-                  className="btn-primary px-6 py-2 rounded-lg font-medium text-base"
+                  className="btn-primary px-6 py-2 rounded-lg font-medium text-base disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={minting}
                 >
                   MintIP
                 </button>
