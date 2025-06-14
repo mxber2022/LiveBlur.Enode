@@ -213,11 +213,19 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
         }
       }
       if (shouldBlur) {
+        // ctx.save();
+        // ctx.fillStyle = 'rgba(255,0,0,0.5)';
+        // ctx.fillRect(box.x, box.y, box.width, box.height);
+        // ctx.restore();
         ctx.save();
-        ctx.fillStyle = 'rgba(255,0,0,0.5)';
-        ctx.fillRect(box.x, box.y, box.width, box.height);
-        ctx.restore();
-        blurredCount++;
+          ctx.filter = 'blur(12px)';
+          ctx.drawImage(
+            canvas,
+            box.x, box.y, box.width, box.height,
+            box.x, box.y, box.width, box.height
+          );
+          ctx.restore();
+        blurredCount++; 
       }
       ctx.strokeStyle = shouldBlur ? '#ef4444' : '#22c55e';
       ctx.lineWidth = 2;
