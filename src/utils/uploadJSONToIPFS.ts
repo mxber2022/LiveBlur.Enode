@@ -1,0 +1,11 @@
+import { PinataSDK } from "pinata-web3";
+
+const pinata = new PinataSDK({
+  pinataJwt: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJlYTJjNzZhNi0wNTZkLTQ1ZmMtOGE0My1kYjRhYjBhNDhmYWYiLCJlbWFpbCI6Im14YmVyMjAyMkBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGluX3BvbGljeSI6eyJyZWdpb25zIjpbeyJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MSwiaWQiOiJGUkExIn0seyJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MSwiaWQiOiJOWUMxIn1dLCJ2ZXJzaW9uIjoxfSwibWZhX2VuYWJsZWQiOmZhbHNlLCJzdGF0dXMiOiJBQ1RJVkUifSwiYXV0aGVudGljYXRpb25UeXBlIjoic2NvcGVkS2V5Iiwic2NvcGVkS2V5S2V5IjoiMTE2MDg0ZTdjNzViMjA0NDMwMTQiLCJzY29wZWRLZXlTZWNyZXQiOiJmMTA0ODk3NTg4YzhjZDQxNDUwYzMxMGI1MTM2MTEyNTJmN2E5OWFjMzZlMDE1Yjc1OWM2MDM3ZTFiNDkxYzhjIiwiZXhwIjoxNzgxMzc3MjIzfQ.ky1qACH3cpAngylZkFPaGiNNlOqhV3xgma56_iH43i8",
+});
+
+export async function uploadJSONToIPFS(jsonMetadata: any): Promise<string> {
+    console.log("pinataJwt", process.env.VITE_PINATA_JWT);
+  const { IpfsHash } = await pinata.upload.json(jsonMetadata);
+  return IpfsHash;
+}
