@@ -38,6 +38,7 @@ export const Gallery: React.FC<GalleryProps> = ({
   const { address } = useAccount();
   const [minting, setMinting] = useState(false);
   const [mintError, setMintError] = useState<string | null>(null);
+  const [mintSuccess, setMintSuccess] = useState<{ txHash: string; ipId: string } | null>(null);
 
   const filteredGallery = gallery
     .filter(item => {
@@ -514,6 +515,13 @@ export const Gallery: React.FC<GalleryProps> = ({
                 e.preventDefault();
                 setMinting(true);
                 setMintError(null);
+                setMintSuccess(null);
+                if (!address || !address.startsWith('0x')) {
+                  setMintError('Wallet not connected. Please connect your wallet.');
+                  setMinting(false);
+                  return;
+                }
+                const safeAddress = address as `0x${string}`;
                 try {
                   // 1. Gather metadata
                   const dataWithAttributes = {
@@ -524,8 +532,9 @@ export const Gallery: React.FC<GalleryProps> = ({
                   };
 
                   // 2. Upload NFT metadata to IPFS
-                  const ipfsmetadata = await uploadJSONToIPFS(dataWithAttributes);
-                  const nftHash = createHash('sha256').update(JSON.stringify(dataWithAttributes)).digest('hex');
+                  const ipfsmetadataRaw = await uploadJSONToIPFS(dataWithAttributes);
+                  const ipfsmetadata = ipfsmetadataRaw ? String(ipfsmetadataRaw) : '';
+                  const nftHash = `0x${createHash('sha256').update(JSON.stringify(dataWithAttributes)).digest('hex')}` as `0x${string}`;
 
                   // 3. Setup Story Protocol client
                   const client = await setupStoryClient();
@@ -537,38 +546,36 @@ export const Gallery: React.FC<GalleryProps> = ({
                     createdAt: new Date().getTime().toString(),
                     creators: [
                       {
-                        name: address as `0x${string}`,
-                        address: address as `0x${string}`,
+                        name: safeAddress,
+                        address: safeAddress,
                         contributionPercent: 100,
                       },
                     ],
                     image: nftImage as string,
-                    imageHash: `0x${nftHash}`, // Optionally hash the image
+                    imageHash: nftHash,
                     mediaUrl: nftImage as string,
-                    mediaHash: `0x${nftHash}`,
+                    mediaHash: nftHash,
                     mediaType: 'image/jpeg',
                   });
 
                   // 5. Upload IP metadata to IPFS
-                  const ipIpfsHash = await uploadJSONToIPFS(ipMetadata);
-                  const ipHash = createHash('sha256').update(JSON.stringify(ipMetadata)).digest('hex');
+                  const ipIpfsHashRaw = await uploadJSONToIPFS(ipMetadata);
+                  const ipIpfsHash = ipIpfsHashRaw ? String(ipIpfsHashRaw) : '';
+                  const ipHash = `0x${createHash('sha256').update(JSON.stringify(ipMetadata)).digest('hex')}` as `0x${string}`;
 
                   // 6. Mint and register IP
                   const response = await client.ipAsset.mintAndRegisterIp({
                     spgNftContract: '0xc32A8a0FF3beDDDa58393d022aF433e78739FAbc',
                     ipMetadata: {
                       ipMetadataURI: `https://ipfs.io/ipfs/${ipIpfsHash}`,
-                      ipMetadataHash: `0x${ipHash}`,
+                      ipMetadataHash: ipHash,
                       nftMetadataURI: `https://ipfs.io/ipfs/${ipfsmetadata}`,
-                      nftMetadataHash: `0x${nftHash}`,
+                      nftMetadataHash: nftHash,
                     }
                   });
 
-                  console.log(
-                    `Root IPA created at tx hash ${response.txHash}, IPA ID: ${response.ipId}`
-                  );
-
-                  setShowNftModal(false);
+                  setMintSuccess({ txHash: String(response.txHash), ipId: String(response.ipId) });
+                  // Optionally reset form fields
                   setNftMeta({ name: '', description: '' });
                   setNftImage(null);
                   setNftAttributes([]);
@@ -648,13 +655,29 @@ export const Gallery: React.FC<GalleryProps> = ({
 
               {/* Buttons */}
               <div className="flex justify-center gap-4 pt-4">
-                {minting && <div className="text-blue-400 text-sm text-center">Minting NFT, please wait...</div>}
+                {minting && <div className="text-blue-400 text-sm text-center">Minting IP, please wait...</div>}
                 {mintError && <div className="text-red-400 text-sm text-center">{mintError}</div>}
+                {mintSuccess && (
+                  <div className="text-green-400 text-sm text-center space-y-2">
+                    <div>IP Minted!</div>
+                    <div>
+                       <a
+                        href={`https://aeneid.explorer.story.foundation/ipa/${encodeURIComponent(mintSuccess.ipId)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-blue-300 hover:text-blue-400"
+                      >
+                        Link
+                      </a>
+                    </div>
+                    {/* <div className="text-xs text-gray-400 break-all">Tx Hash: {mintSuccess.txHash}</div> */}
+                  </div>
+                )}
                 <button
                   type="submit"
                   className="btn-primary px-6 py-2 rounded-lg font-medium text-base"
                 >
-                  Save
+                  MintIP
                 </button>
                 <button
                   type="button"
