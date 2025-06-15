@@ -34,6 +34,8 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
     facesDetected: 0,
     facesBlurred: 0
   });
+  const [mjpegStreamUrl, setMjpegStreamUrl] = useState<string | null>(null);
+  const [isBackendStream, setIsBackendStream] = useState(false);
 
   // Load face-api models
   useEffect(() => {
@@ -53,33 +55,6 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
     loadModels();
   }, []);
 
-  // Run face detection every 200ms and cache results
-  // React.useEffect(() => {
-  //   if (!modelsLoaded || !videoRef.current) return;
-  //   let stopped = false;
-  //   const detectLoop = async () => {
-  //     while (!stopped) {
-  //       if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
-  //         try {
-  //           const detections = await faceapi
-  //             .detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions({ 
-  //               inputSize: 416, 
-  //               scoreThreshold: detectionConfidence 
-  //             }))
-  //             .withFaceLandmarks()
-  //             .withFaceDescriptors();
-  //           lastDetectionsRef.current = detections;
-  //         } catch (err) {
-  //           console.error('Detection error:', err);
-  //         }
-  //       }
-  //       await new Promise(res => setTimeout(res, 200));
-  //     }
-  //   };
-  //   detectLoop();
-  //   return () => { stopped = true; };
-  // }, [modelsLoaded, detectionConfidence]);
-
   React.useEffect(() => {
     if (!modelsLoaded || !videoRef.current) return;
     let stopped = false;
@@ -98,91 +73,6 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
     detectLoop();
     return () => { stopped = true; };
   }, [modelsLoaded, detectionConfidence]);
-
-  // Face detection and blurring logic
-  // const processFrame = useCallback(async () => {
-  //   if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
-
-  //   const video = videoRef.current;
-  //   const canvas = canvasRef.current;
-  //   const ctx = canvas.getContext('2d');
-    
-  //   if (!ctx) return;
-
-  //   // Update FPS counter
-  //   const now = Date.now();
-  //   fpsCounterRef.current.frames++;
-  //   if (now - fpsCounterRef.current.lastTime >= 1000) {
-  //     setDetectionStats(prev => ({
-  //       ...prev,
-  //       fps: fpsCounterRef.current.frames
-  //     }));
-  //     fpsCounterRef.current.frames = 0;
-  //     fpsCounterRef.current.lastTime = now;
-  //   }
-
-  //   // Draw video frame
-  //   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  //   // Process cached detections
-  //   let blurredCount = 0;
-  //   const detections = lastDetectionsRef.current;
-    
-  //   for (const detection of detections) {
-  //     const { box } = detection.detection;
-  //     let shouldBlur = false;
-      
-  //     // Check if face matches any in database
-  //     if (faceDatabase.length > 0) {
-  //       const faceDescriptor = detection.descriptor;
-  //       for (const knownFace of faceDatabase) {
-  //         const distance = faceapi.euclideanDistance(faceDescriptor, knownFace.descriptor);
-  //         if (distance < 0.6) {
-  //           shouldBlur = true;
-  //           break;
-  //         }
-  //       }
-  //     } else {
-  //       // If no database, blur all faces
-  //       shouldBlur = true;
-  //     }
-
-  //     if (shouldBlur) {
-  //       // Apply blur effect
-  //       ctx.save();
-  //       ctx.filter = `blur(${blurIntensity}px)`;
-  //       ctx.drawImage(
-  //         video,
-  //         box.x, box.y, box.width, box.height,
-  //         box.x, box.y, box.width, box.height
-  //       );
-  //       ctx.restore();
-  //       blurredCount++;
-  //     }
-
-  //     // Draw detection rectangle with glass effect
-  //     ctx.strokeStyle = shouldBlur ? '#ef4444' : '#22c55e';
-  //     ctx.lineWidth = 2;
-  //     ctx.strokeRect(box.x, box.y, box.width, box.height);
-      
-  //     // Draw confidence score with glass background
-  //     ctx.fillStyle = shouldBlur ? 'rgba(239, 68, 68, 0.8)' : 'rgba(34, 197, 94, 0.8)';
-  //     ctx.fillRect(box.x, box.y - 25, 60, 20);
-  //     ctx.fillStyle = 'white';
-  //     ctx.font = '12px Inter';
-  //     ctx.fillText(
-  //       `${Math.round(detection.detection.score * 100)}%`,
-  //       box.x + 5,
-  //       box.y - 10
-  //     );
-  //   }
-    
-  //   setDetectionStats(prev => ({ 
-  //     ...prev, 
-  //     facesBlurred: blurredCount, 
-  //     facesDetected: detections.length 
-  //   }));
-  // }, [modelsLoaded, faceDatabase, blurIntensity]);
 
   const processFrame = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
@@ -213,10 +103,6 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
         }
       }
       if (shouldBlur) {
-        // ctx.save();
-        // ctx.fillStyle = 'rgba(255,0,0,0.5)';
-        // ctx.fillRect(box.x, box.y, box.width, box.height);
-        // ctx.restore();
         ctx.save();
           ctx.filter = 'blur(12px)';
           ctx.drawImage(
@@ -257,35 +143,24 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
     };
   }, [isPlaying, modelsLoaded, processFrame, onProcessingChange]);
 
+  const isYouTubeOrTwitch = (url: string) =>
+    url.includes('youtube.com') || url.includes('youtu.be') || url.includes('twitch.tv');
+
+  // Helper to convert descriptors for backend
+  const getDescriptorArrays = () => faceDatabase.map(face => Array.from(face.descriptor));
+
   const validateStreamUrl = (url: string): { valid: boolean; message?: string } => {
     if (url === 'webcam') return { valid: true };
-    
-    // Check for unsupported sources
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      return { 
-        valid: false, 
-        message: 'YouTube videos are not supported due to CORS restrictions. Use direct video files or webcam instead.' 
-      };
-    }
-    
-    if (url.includes('twitch.tv') || url.includes('facebook.com') || url.includes('instagram.com')) {
-      return { 
-        valid: false, 
-        message: 'Social media platforms block direct video access. Use direct video files or webcam instead.' 
-      };
-    }
-
+    // Remove block for YouTube/Twitch, allow all URLs
     // Check for supported formats
     const supportedExtensions = ['.mp4', '.webm', '.ogg', '.m3u8'];
     const hasValidExtension = supportedExtensions.some(ext => url.toLowerCase().includes(ext));
-    
-    if (url.startsWith('http') && !hasValidExtension) {
-      return { 
-        valid: false, 
-        message: 'URL should point to a direct video file (.mp4, .webm, .ogg) or HLS stream (.m3u8)' 
+    if (url.startsWith('http') && !hasValidExtension && !isYouTubeOrTwitch(url)) {
+      return {
+        valid: false,
+        message: 'URL should point to a direct video file (.mp4, .webm, .ogg) or HLS stream (.m3u8)'
       };
     }
-
     return { valid: true };
   };
 
@@ -294,26 +169,41 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
       setError('Please enter a stream URL or select webcam');
       return;
     }
-
     const validation = validateStreamUrl(streamUrl);
     if (!validation.valid) {
       setError(validation.message || 'Invalid stream URL');
       return;
     }
-
     try {
       setError('');
-      
-      if (streamUrl === 'webcam') {
+      if (isYouTubeOrTwitch(streamUrl)) {
+        // Use backend for YouTube/Twitch
+        setIsBackendStream(true);
+        setIsPlaying(true);
+        // POST descriptors and URL to backend
+        const descriptors = getDescriptorArrays();
+        const payload = { url: streamUrl, descriptors };
+        // For demo, use a unique session id (timestamp)
+        const sessionId = Date.now().toString();
+        // Option 1: Use GET with base64 descriptors (not recommended for large data)
+        // Option 2: Use POST, then display <img src="/video_feed?session=..."> if backend supports session
+        // For now, just POST and use a static endpoint
+        await fetch('http://localhost:5001/video_feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setMjpegStreamUrl(`http://localhost:5001/video_feed`); // If backend supports session, append ?session=...
+      } else if (streamUrl === 'webcam') {
+        setIsBackendStream(false);
         // Request webcam access
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
             width: { ideal: 1920 },
             height: { ideal: 1080 },
             facingMode: 'user'
-          } 
+          }
         });
-        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
@@ -321,6 +211,7 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
           setIsPlaying(true);
         }
       } else {
+        setIsBackendStream(false);
         // For direct video URLs
         if (videoRef.current) {
           videoRef.current.src = streamUrl;
@@ -331,17 +222,17 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      if (errorMessage.includes('Permission denied')) {
-        setError('Camera access denied. Please allow camera permissions and try again.');
-      } else if (errorMessage.includes('CORS')) {
-        setError('Video source blocked by CORS policy. Use a direct video file URL or webcam.');
-      } else {
-        setError(`Failed to start stream: ${errorMessage}`);
-      }
+      setError(`Failed to start stream: ${errorMessage}`);
     }
   };
 
   const stopStream = () => {
+    if (isBackendStream) {
+      setMjpegStreamUrl(null);
+      setIsBackendStream(false);
+      setIsPlaying(false);
+      return;
+    }
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.src = '';
@@ -413,21 +304,30 @@ export const VideoStream: React.FC<VideoStreamProps> = ({
 
       {/* Video Container - Responsive Height */}
       <div className="relative z-0 flex-1 bg-gradient-to-br from-black to-gray-900 min-h-[250px] sm:min-h-[350px]">
-
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-contain opacity-0"
-          onLoadedMetadata={handleVideoLoadedMetadata}
-          muted
-          playsInline
-        />
+        {isBackendStream && isPlaying && mjpegStreamUrl ? (
+          <img
+            src={mjpegStreamUrl}
+            alt="Live Stream"
+            className="absolute inset-0 w-full h-full object-contain"
+            style={{ zIndex: 1 }}
+          />
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              className="absolute inset-0 w-full h-full object-contain opacity-0"
+              onLoadedMetadata={handleVideoLoadedMetadata}
+              muted
+              playsInline
+            />
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full object-contain"
+              style={{ zIndex: 1 }}
+            />
+          </>
+        )}
         
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-contain"
-          style={{ zIndex: 1 }}
-        />
-
         {/* Compact Real-time Stats Overlay */}
         {isPlaying && (
           <div className="absolute top-2 sm:top-4 left-2 sm:left-4 glass-premium rounded-lg sm:rounded-xl p-2 sm:p-3 backdrop-blur-xl">
