@@ -91,8 +91,8 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             />
             {isUnsupportedUrl(streamUrl) && (
               <div className="mt-3 flex items-start space-x-2 text-red-400 text-sm glass-dark rounded-lg p-3">
-                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>This platform is not supported due to CORS restrictions</span>
+                {/* <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" /> */}
+                {/* <span>This platform is not supported due to CORS restrictions</span> */}
               </div>
             )}
           </div>
@@ -128,10 +128,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               <p>• Direct video files (.mp4, .webm, .ogg)</p>
               <p>• HLS streams (.m3u8)</p>
             </div>
-            <p className="font-medium text-red-400 flex items-center space-x-2 mt-3">
+            {/* <p className="font-medium text-red-400 flex items-center space-x-2 mt-3">
               <span className="w-2 h-2 bg-red-400 rounded-full"></span>
               <span>Not Supported:</span>
-            </p>
+            </p> */}
             <div className="ml-4 text-xs">
               <p>• YouTube, Twitch, social media platforms</p>
             </div>
